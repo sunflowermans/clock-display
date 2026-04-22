@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import sys
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QCursor, QGuiApplication, QFont
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
 from datetime import datetime
 import os
 import signal
@@ -35,7 +36,7 @@ def handle_existing_instance():
         f.write(str(os.getpid()))
 
 class ClockOverlay(QWidget):
-    def __init__(self):
+    def __init__(self, screen):
         handle_existing_instance()
         super().__init__()
 
@@ -55,7 +56,9 @@ class ClockOverlay(QWidget):
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.showFullScreen()
+        geo = screen.geometry()
+        self.setGeometry(geo)
+        self.show()
 
         self.setStyleSheet("background-color: rgba(0, 0, 0, 160);")
 
@@ -90,6 +93,18 @@ class ClockOverlay(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(cleanup)
-    overlay = ClockOverlay()
+
+    # Get current cursor position
+    pos = QCursor.pos()
+
+    # Find which screen contains that position
+    screen = QGuiApplication.screenAt(pos)
+
+    # Fallback (just in case)
+    if screen is None:
+        screen = app.primaryScreen()
+
+    overlay = ClockOverlay(screen)
     overlay.show()
+
     sys.exit(app.exec())
