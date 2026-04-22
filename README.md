@@ -1,2 +1,2 @@
 # clock-display
-display a clock overlay
+Display a clock overlay. KDE + wayland with PyQT.
