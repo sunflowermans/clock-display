@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from PyQt6.QtWidgets import QApplication, QLabel, QWidget
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtGui import QCursor, QGuiApplication, QFont
+from PyQt6.QtGui import QGuiApplication, QFont
 from PyQt6.QtCore import Qt, QTimer
 from datetime import datetime
 import os
@@ -39,6 +38,7 @@ class ClockOverlay(QWidget):
     def __init__(self, screen):
         handle_existing_instance()
         super().__init__()
+        self._target_screen = screen
 
         # Create label FIRST
         self.label = QLabel(self)
@@ -56,9 +56,11 @@ class ClockOverlay(QWidget):
 
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        geo = screen.geometry()
-        self.setGeometry(geo)
-        self.show()
+        print(f"target screen: {screen.name()}")
+        self._apply_target_screen()
+        # On Wayland, the compositor may ignore the initial placement hint until the
+        # native window exists. Re-apply once the window handle is created.
+        QTimer.singleShot(0, self._apply_target_screen)
 
         self.setStyleSheet("background-color: rgba(0, 0, 0, 160);")
 
@@ -90,21 +92,54 @@ class ClockOverlay(QWidget):
     def closeEvent(self, event):
         QApplication.quit()
 
+    def _apply_target_screen(self):
+        screen = self._target_screen
+        if screen is None:
+            return
+
+        # Provide multiple hints; different backends honor different ones.
+        self.setScreen(screen)
+        self.setGeometry(screen.geometry())
+
+        handle = self.windowHandle()
+        if handle is not None:
+            handle.setScreen(screen)
+
+        self.showFullScreen()
+
+def rightmost_screen():
+    screens = QGuiApplication.screens()
+    if not screens:
+        return None
+    return max(screens, key=lambda s: s.geometry().x() + s.geometry().width())
+
+def dump_screens(tag=""):
+    print(f"\n--- QGuiApplication.screens() {tag} ---")
+    screens = QGuiApplication.screens()
+    for i, s in enumerate(screens):
+        g = s.geometry()
+        ag = s.availableGeometry()
+        print(
+            f"[{i}] name={s.name()} "
+            f"geo=({g.x()},{g.y()},{g.width()}x{g.height()}) "
+            f"avail=({ag.x()},{ag.y()},{ag.width()}x{ag.height()}) "
+            f"dpr={s.devicePixelRatio()}"
+        )
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(cleanup)
 
-    # Get current cursor position
-    pos = QCursor.pos()
-
-    # Find which screen contains that position
-    screen = QGuiApplication.screenAt(pos)
-
-    # Fallback (just in case)
+    # print(f"Qt platform: {QGuiApplication.platformName()}")
+    # dump_screens("at start")
+    # _screen_dump_timer = QTimer()
+    # _screen_dump_timer.timeout.connect(lambda: dump_screens("tick"))
+    # _screen_dump_timer.start(1000)
+    screen = QGuiApplication.primaryScreen()
     if screen is None:
         screen = app.primaryScreen()
 
     overlay = ClockOverlay(screen)
-    overlay.show()
 
     sys.exit(app.exec())
